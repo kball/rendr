@@ -27,7 +27,7 @@ module.exports = BaseView.extend({
   render: function() {},
 
   setCurrentView: function(view) {
-    this.$content.html(view.el);
+    this.$content.append(view.el);
     view.render();
   },
 
