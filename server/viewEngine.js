@@ -75,10 +75,10 @@ ViewEngine.prototype.getBootstrappedData = function getBootstrappedData(locals, 
 
   _.each(locals, function(modelOrCollection, name) {
     if (app.modelUtils.isModel(modelOrCollection) || app.modelUtils.isCollection(modelOrCollection)) {
-      bootstrappedData[name] = {
+      bootstrappedData[name] = app.modelUtils.deepEscape({
         summary: app.fetcher.summarize(modelOrCollection),
-        data: app.modelUtils.deepEscape(modelOrCollection.toJSON())
-      };
+        data: modelOrCollection.toJSON()
+      });
     }
   });
   return bootstrappedData;

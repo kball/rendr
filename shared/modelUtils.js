@@ -140,29 +140,23 @@ ModelUtils.prototype.modelIdAttribute = function(modelName, callback) {
 };
 
 ModelUtils.prototype.deepEscape = function(modelOrCollection) {
+  var self = this;
   _.each(modelOrCollection, function(value, key) {
     if(_.isString(value)) {
       modelOrCollection[key] = sanitizer.escape(value);
     } else if (_.isObject(value)) {
-      _.each(modelOrCollection[key], function(innerValue, innerKey) {
-        if(_.isString(innerValue)) {
-          modelOrCollection[key][innerKey] = sanitizer.escape(innerValue);
-        }
-      });
+      modelOrCollection[key] = self.deepEscape(value);
     }
   });
   return modelOrCollection;
 };
 ModelUtils.prototype.deepUnescape = function(modelOrCollection) {
+  var self = this;
   _.each(modelOrCollection, function(value, key) {
     if(_.isString(value)) {
       modelOrCollection[key] = sanitizer.unescapeEntities(value);
     } else if (_.isObject(value)) {
-      _.each(modelOrCollection[key], function(innerValue, innerKey) {
-        if(_.isString(innerValue)) {
-          modelOrCollection[key][innerKey] = sanitizer.unescapeEntities(innerValue);
-        }
-      });
+      modelOrCollection[key] = self.deepUnescape(value);
     }
   });
   return modelOrCollection;
