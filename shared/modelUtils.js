@@ -139,29 +139,31 @@ ModelUtils.prototype.modelIdAttribute = function(modelName, callback) {
   });
 };
 
-ModelUtils.prototype.deepEscape = function(modelOrCollection, maxDepth, currentDepth) {
-  var self = this;
-  var depth = _.defaults({max: maxDepth, current:currentDepth}, {max: 5, current: 1});
+ModelUtils.prototype.deepApply = function(modelOrCollection, fn, seen) {
+  if(_.isUndefined(seen)) {
+    seen = [];
+  }
+  if(_.contains(seen, modelOrCollection)) {
+    return modelOrCollection;
+  }
 
+  seen.push(modelOrCollection);
+
+  var self = this;
   _.each(modelOrCollection, function(value, key) {
     if(_.isString(value)) {
-      modelOrCollection[key] = sanitizer.escape(value);
-    } else if (_.isObject(value) && depth.current < depth.max) {
-      modelOrCollection[key] = self.deepEscape(value, depth.max, depth.current + 1);
+      modelOrCollection[key] = fn(value);
+    } else if (_.isObject(value)) {
+      modelOrCollection[key] = self.deepApply(value, fn, seen);
     }
   });
   return modelOrCollection;
 };
-ModelUtils.prototype.deepUnescape = function(modelOrCollection, maxDepth, currentDepth) {
-  var self = this;
-  var depth = _.defaults({max: maxDepth, current:currentDepth}, {max: 5, current: 1});
 
-  _.each(modelOrCollection, function(value, key) {
-    if(_.isString(value)) {
-      modelOrCollection[key] = sanitizer.unescapeEntities(value);
-    } else if (_.isObject(value) && depth.current < depth.max) {
-      modelOrCollection[key] = self.deepUnescape(value, depth.max, depth.current + 1);
-    }
-  });
-  return modelOrCollection;
+ModelUtils.prototype.deepEscape = function(modelOrCollection) {
+  return this.deepApply(modelOrCollection, sanitizer.escape);
+};
+
+ModelUtils.prototype.deepUnescape = function(modelOrCollection) {
+  return this.deepApply(modelOrCollection, sanitizer.unescapeEntities);
 };
