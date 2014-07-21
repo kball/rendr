@@ -1,6 +1,5 @@
 var path = require('path'),
     _ = require('underscore'),
-    sanitizer = require('sanitizer'),
     layoutTemplates = {};
 
 module.exports = exports = ViewEngine;
