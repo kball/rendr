@@ -71,8 +71,7 @@ ViewEngine.prototype.getViewHtml = function getViewHtml(viewPath, locals, app) {
 };
 
 ViewEngine.prototype._getBootstrappedData = function _getBootstrappedData(locals, app) {
-  var bootstrappedData = {},
-      scope = this;
+  var bootstrappedData = {};
 
   _.each(locals, function(modelOrCollection, name) {
     if (app.modelUtils.isModel(modelOrCollection) || app.modelUtils.isCollection(modelOrCollection)) {
