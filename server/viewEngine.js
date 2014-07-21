@@ -1,5 +1,6 @@
 var path = require('path'),
     _ = require('underscore'),
+    sanitizer = require('sanitizer'),
     layoutTemplates = {};
 
 module.exports = exports = ViewEngine;
@@ -76,7 +77,7 @@ ViewEngine.prototype.getBootstrappedData = function getBootstrappedData(locals, 
     if (app.modelUtils.isModel(modelOrCollection) || app.modelUtils.isCollection(modelOrCollection)) {
       bootstrappedData[name] = {
         summary: app.fetcher.summarize(modelOrCollection),
-        data: modelOrCollection.toJSON()
+        data: app.modelUtils.deepEscape(modelOrCollection.toJSON())
       };
     }
   });
