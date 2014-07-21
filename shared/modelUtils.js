@@ -149,14 +149,14 @@ ModelUtils.prototype.deepApply = function(modelOrCollection, fn, seen) {
 
   seen.push(modelOrCollection);
 
-  var self = this;
   _.each(modelOrCollection, function(value, key) {
     if(_.isString(value)) {
       modelOrCollection[key] = fn(value);
     } else if (_.isObject(value)) {
-      modelOrCollection[key] = self.deepApply(value, fn, seen);
+      modelOrCollection[key] = this.deepApply(value, fn, seen);
     }
-  });
+  }.bind(this));
+
   return modelOrCollection;
 };
 
