@@ -70,18 +70,25 @@ ViewEngine.prototype.getViewHtml = function getViewHtml(viewPath, locals, app) {
   return view.getHtml();
 };
 
-ViewEngine.prototype.getBootstrappedData = function getBootstrappedData(locals, app) {
-  var bootstrappedData = {};
+ViewEngine.prototype._getBootstrappedData = function _getBootstrappedData(locals, app) {
+  var bootstrappedData = {},
+      scope = this;
 
   _.each(locals, function(modelOrCollection, name) {
     if (app.modelUtils.isModel(modelOrCollection) || app.modelUtils.isCollection(modelOrCollection)) {
-      bootstrappedData[name] = app.modelUtils.deepEscape({
+      bootstrappedData[name] = {
         summary: app.fetcher.summarize(modelOrCollection),
         data: modelOrCollection.toJSON()
-      });
+      };
+
     }
   });
   return bootstrappedData;
+};
+
+ViewEngine.prototype.getBootstrappedData = function getBootstrappedData(locals, app) {
+  var data = this._getBootstrappedData(locals, app);
+  return app.modelUtils.deepEscape(data);
 };
 
 ViewEngine.prototype.clearCachedLayouts = function () {
