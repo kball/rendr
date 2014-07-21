@@ -78,7 +78,6 @@ ViewEngine.prototype._getBootstrappedData = function _getBootstrappedData(locals
         summary: app.fetcher.summarize(modelOrCollection),
         data: modelOrCollection.toJSON()
       };
-
     }
   });
   return bootstrappedData;
