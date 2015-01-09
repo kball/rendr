@@ -18,7 +18,7 @@ irc.freenode.org.
 
 ## Getting Started
 
-To see how to use Rendr to build a simple web app, check out the [examples](https://github.com/rendrjs/rendr/tree/master/examples) directory for a number of different ways to set up a Rendr app.
+To see how to use Rendr to build a simple web app, check out the [examples](https://github.com/rendrjs/rendr-examples) repository for a number of different ways to set up a Rendr app.
 
 Check out the [blog post](http://nerds.airbnb.com/weve-launched-our-first-nodejs-app-to-product) for a more thorough introduction to Rendr.
 
@@ -125,9 +125,9 @@ Inherits from `Backbone.Model`.
 
 ### `BaseAppView`
 
-Inherits for `BaseView`. You can change your main content container from this view by changing the `contentEl` key in the `options` object when extending `BaseAppView`
+Inherits from `BaseView`. You can change your main content container from this view by changing the `contentEl` key in the `options` object when extending `BaseAppView`
 
-```javascript
+```js
 var AppView = BaseAppView.extend({
   options : {
     contentEl : "#mainContent"
@@ -230,7 +230,7 @@ This configuration is passed to the current DataAdapter, which by default is the
 
 **Simple**
 
-```
+```js
 var dataAdapterConfig = {
   host: 'api.github.com',
   protocol: 'https'
@@ -240,7 +240,7 @@ var dataAdapterConfig = {
 
 **Multiple**
 
-```
+```js
 var dataAdapterConfig = {
   'default': {
     host: 'api.github.com',
@@ -258,14 +258,13 @@ Example of how a Backbone model can be configured to select one of the DataAdapt
 
 *Note: This example assumes you are using the [RestAdapter](https://github.com/rendrjs/rendr/blob/master/server/data_adapter/rest_adapter.js).*
 
-````
+```js
 module.exports = Base.extend({
   url: '/repos/:owner/:name',
   api: 'travis-ci'
 });
 module.exports.id = 'Build';
-
-````
+```
 
 ### Adding middleware to Rendr's Express
 
@@ -273,15 +272,13 @@ module.exports.id = 'Build';
 You can optionally add any custom middleware that has to access `req.rendrApp` but should run before
 the Rendr routes by calling configure after createServer.
 
-```
-
+```js
 rendr.createServer(config);
 rendr.configure(function(expressApp) {
 
     expressApp.use(...)
 
 })
-
 ```
 
 ### Template Adapters
@@ -299,7 +296,7 @@ Provides a way for Rendr to utilize custom html template engines.  Rendr's [View
 
 You can tell Rendr which Template Adapter to use.  This represents the node-module that contains the adapter.
 
-````
+```js
 // /app/app.js
 
 module.exports = BaseApp.extend({
@@ -309,7 +306,7 @@ module.exports = BaseApp.extend({
 
 });
 
-````
+```
 
 
 ### Express middleware
@@ -324,10 +321,6 @@ There are a few middleware functions included. Use some or all of these, or use 
 ### Express app
 
 Rather than owning your entire Express app, Rendr simply provides some useful middleware that you can mount into your existing Express app.
-
-### Asset pipeline
-
-Asset bundling and serving are outside of Rendr's scope. However, it does have some specific requirements for JavaScript packaging to support modules that are accessible in the CommonJS style on both the client and server. The [example app](https://github.com/rendrjs/rendr/tree/master/examples/00_simple) uses [Stitch](https://github.com/sstephenson/stitch) for this, though you could also do this with other tools, such as [Browserify](https://github.com/substack/node-browserify).
 
 ## Notes
 

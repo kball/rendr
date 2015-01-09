@@ -9,33 +9,29 @@ var _ = require('underscore'),
     Backbone = require('backbone'),
     async = require('async'),
     isServer = (typeof window === 'undefined'),
-    BaseView;
+    BaseView,
+    $;
 
 if (!isServer) {
   Backbone.$ = window.$ || require('jquery');
+  $ = Backbone.$;
 }
 
 function noop() {}
 
 module.exports = BaseView = Backbone.View.extend({
   constructor: function(options) {
-    var obj;
-
-    this.options = options || {};
+    this.options = _.extend( this.options || {}, options || {} );
 
     this.parseOptions(options);
-
     this.name = this.name || this.app.modelUtils.underscorize(this.constructor.id || this.constructor.name);
 
-    Backbone.View.apply(this, arguments);
+    // parseOptions deals w/ models and collections, but the BaseView will override those changes
+    Backbone.View.call(this, _.omit(options, ['model', 'collection']));
 
     if (this.postInitialize) {
       console.warn('`postInitialize` is deprecated, please use `initialize`');
       this.postInitialize();
-    }
-
-    if ((obj = this.options.model || this.options.collection) && this.renderOnRefresh) {
-      obj.on('refresh', this.render, this);
     }
 
     this.render = this.render.bind(this);
@@ -51,6 +47,7 @@ module.exports = BaseView = Backbone.View.extend({
     /**
      * Populate `this.options` and alias as `options`.
      */
+    var obj;
     options = _.extend(this.options, options || {});
 
     if (options.app != null) {
@@ -63,23 +60,13 @@ module.exports = BaseView = Backbone.View.extend({
       this.parentView = options.parentView;
     }
 
-    if (options.model != null) {
-      if (!(options.model instanceof Backbone.Model) && options.model_name) {
-        options.model = this.app.modelUtils.getModel(options.model_name, options.model, {
-          parse: true
-        });
-      }
-      options.model_name = options.model_name || this.app.modelUtils.modelName(options.model.constructor);
-      options.model_id = options.model.id;
-    }
-
-    if (options.collection != null) {
-      options.collection_name = options.collection_name || this.app.modelUtils.modelName(options.collection.constructor);
-      options.collection_params = options.collection.params;
-    }
-
+    options = BaseView.parseModelAndCollection(this.app.modelUtils, _.extend({ parse: true }, options));
     this.model = options.model;
     this.collection = options.collection;
+
+    if ((obj = this.model || this.collection) && this.renderOnRefresh) {
+      obj.on('refresh', this.render, this);
+    }
   },
 
   /**
@@ -117,17 +104,21 @@ module.exports = BaseView = Backbone.View.extend({
    * Try to return proper data if model or collection is available.
    */
   getTemplateData: function() {
+    var retVal, parsedOptions;
+
     if (this.model) {
-      return this.model.toJSON();
+      retVal = this.model.toJSON();
     } else if (this.collection) {
-      return {
+      retVal = {
         models: this.collection.toJSON(),
         meta: this.collection.meta,
         params: this.collection.params
       };
-    } else {
-      return _.clone(this.options);
     }
+
+    // Remove options that are duplicates in the templates
+    parsedOptions = _.omit(this.options, ['model', 'collection', 'app']);
+    return _.extend({}, retVal, parsedOptions);
   },
 
   /**
@@ -256,10 +247,20 @@ module.exports = BaseView = Backbone.View.extend({
     var params = {},
         fetchSpec;
 
-    params[this.options.param_name] = this.options.param_value;
+    if (this.options.fetch_params) {
+      if (!_.isObject(this.options.fetch_params)) {
+        throw new Error('fetch_params must be an object for lazy loaded views')
+      }
+
+      params = this.options.fetch_params;
+    } else if (this.options.param_name) {
+      params[this.options.param_name] = this.options.param_value;
+    }
+
     if (this.options.model_id != null) {
       params.id = this.options.model_id;
     }
+
     if (this.options.model_name != null) {
       fetchSpec = {
         model: {
@@ -275,7 +276,10 @@ module.exports = BaseView = Backbone.View.extend({
         }
       };
     }
+
     this.setLoading(true);
+
+    this._preRender();
     this.app.fetch(fetchSpec, this._fetchLazyCallback.bind(this));
   },
 
@@ -321,75 +325,52 @@ module.exports = BaseView = Backbone.View.extend({
    */
   postRender: noop,
 
-  /**
-   * Hydrate this view with the data it needs, if being attached
-   * to pre-exisitng DOM.
-   */
-  hydrate: function(callback) {
-    var fetchSummary = this.options.fetch_summary;
-    if (!_.isEmpty(fetchSummary)) {
-      this.app.fetcher.hydrate(fetchSummary, {
-        app: this.app
-      }, function(err, results) {
-        this.parseOptions(results);
-        callback(err);
-      }.bind(this));
-    } else {
-      callback(null);
-    }
-  },
-
   setLoading: function(loading) {
     this.$el.toggleClass('loading', loading);
     this.trigger('loading', loading);
+  },
+
+  attachOrRender: function(element, parentView) {
+    var $el = $(element);
+
+    this.parentView = parentView;
+    this.viewing = true;
+
+    if (this.options.lazy === true && this.options.collection == null && this.options.model == null) {
+      $el.attr('data-view-attached', true);
+      this.setElement($el);
+
+      return this.fetchLazy();
+    }
+
+    if ($el.data('render')) {
+      $el.replaceWith(this.$el);
+      this.render();
+    } else {
+      $el.attr('data-view-attached', true);
+      this.setElement($el);
+      this.attach();
+    }
   },
 
   /**
    * When HTML is already present (rendered by server),
    * this is what gets called to bind to the element.
    */
-  attach: function(element, parentView) {
-    var $el = $(element);
-    $el.data('view-attached', true);
-    this.setElement($el);
+  attach: function() {
+    /**
+     * Call preRender() so we can access things setup by @hydrate()
+     * (like @model) in i.e. @getTemplateData().
+     */
+    this._preRender();
 
     /**
-     * Store a reference to the parent view.
+     * We have to call postRender() so client-only things happen,
+     * i.e. initialize slideshows, etc.
      */
-    this.parentView = parentView;
+    this._postRender();
 
-    /**
-     * When the view is attached, flip viewing to true
-     */
-    this.viewing = true;
-
-    /**
-     * Hydrate looks if there is a model or collection associated
-     * with this view, and tries to load it from memory.
-     */
-    this.hydrate(function(err) {
-      /**
-       * Call preRender() so we can access things setup by @hydrate()
-       * (like @model) in i.e. @getTemplateData().
-       */
-      this._preRender();
-
-      /**
-       * We have to call postRender() so client-only things happen,
-       * i.e. initialize slideshows, etc.
-       */
-      this._postRender();
-
-      /**
-       * If the view says it should try to be lazy loaded, and it doesn't
-       * have a model or collection, then do so.
-       */
-      if (this.options.lazy === true && this.options.collection == null && this.options.model == null) {
-        this.fetchLazy();
-      }
-      this.trigger('attach');
-    }.bind(this));
-
+    this.trigger('attach');
   },
 
   /**
@@ -456,30 +437,44 @@ BaseView.getView = function(viewName, entryPath, callback) {
   }
 };
 
+BaseView.getViewOptions = function ($el) {
+  var parsed,
+    options = $el.data();
+
+  _.each(options, function(value, key) {
+    if (_.isString(value)) {
+      parsed = _.unescape(value);
+      try {
+        parsed = JSON.parse(parsed);
+      } catch (err) {}
+      options[key] = parsed;
+    }
+  });
+
+  return options;
+};
+
 BaseView.attach = function(app, parentView, callback) {
   var scope = parentView ? parentView.$el : null,
       list = $('[data-view]', scope).toArray();
 
   async.map(list, function(el, cb) {
-    var $el, options, parsed, viewName;
+    var $el, options, viewName, fetchSummary;
     $el = $(el);
     if (!$el.data('view-attached')) {
-      options = $el.data();
-      viewName = options.view;
-      _.each(options, function(value, key) {
-        if (_.isString(value)) {
-          parsed = _.unescape(value);
-          try {
-            parsed = JSON.parse(parsed);
-          } catch (err) {}
-          options[key] = parsed;
-        }
-      });
+      options = BaseView.getViewOptions($el);
       options.app = app;
-      BaseView.getView(viewName, app.options.entryPath, function(ViewClass) {
-        var view = new ViewClass(options);
-        view.attach($el, parentView);
-        cb(null, view);
+
+      viewName = options.view;
+
+      fetchSummary = options.fetch_summary || {};
+      app.fetcher.hydrate(fetchSummary, { app: app }, function (err, results) {
+        options = _.extend(options, results);
+        BaseView.getView(viewName, app.options.entryPath, function(ViewClass) {
+          var view = new ViewClass(options);
+          view.attachOrRender($el, parentView);
+          cb(null, view);
+        });
       });
     } else {
       cb(null, null);
@@ -488,6 +483,33 @@ BaseView.attach = function(app, parentView, callback) {
     // no error handling originally
     callback(_.compact(views));
   });
+};
+
+BaseView.parseModelAndCollection = function(modelUtils, options) {
+  if (options.model != null) {
+    if (!(options.model instanceof Backbone.Model) && options.model_name) {
+      options.model = modelUtils.getModel(options.model_name, options.model, {
+        parse: !!options.parse,
+        app: options.app
+      });
+    }
+    options.model_name = options.model_name || modelUtils.modelName(options.model.constructor);
+    options.model_id = options.model.id;
+  }
+
+  if (options.collection != null) {
+    if (!(options.collection instanceof Backbone.Collection) && options.collection_name) {
+      options.collection = modelUtils.getCollection(options.collection_name, options.collection, {
+        parse: !!options.parse,
+        app: options.app,
+        params: options.collection_params
+      });
+    }
+    options.collection_name = options.collection_name || modelUtils.modelName(options.collection.constructor);
+    options.collection_params = options.collection_params || options.collection.params;
+  }
+
+  return options;
 };
 
 BaseView.extractFetchSummary = function (modelUtils, options) {

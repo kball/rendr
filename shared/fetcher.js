@@ -26,7 +26,7 @@ function Fetcher(options) {
 }
 
 Fetcher.prototype.buildOptions = function(additionalOptions, params) {
-  var options = {app: this.app};
+  var options = {app: this.app, parse: true};
   _.defaults(options, additionalOptions);
   _.defaults(options, params);
   return options;
@@ -109,32 +109,23 @@ Fetcher.prototype._retrieve = function(fetchSpecs, options, callback) {
 
   _.each(fetchSpecs, function(spec, name) {
     batchedRequests[name] = function(cb) {
-      var collectionData, model, modelData, modelOptions;
+      var model;
 
       if (!options.readFromCache) {
         this.fetchFromApi(spec, options, cb);
       } else {
-        modelData = null;
-        modelOptions = {};
+        model = null;
 
         // First, see if we have stored the model or collection.
         if (spec.model != null) {
 
-          this._retrieveModel(spec, function(err, modelData) {
-            this._retrieveModelData(spec, modelData, modelOptions, options, cb);
+          this._retrieveModel(spec, function(err, model) {
+            this._refreshData(spec, model, options, cb);
           }.bind(this));
 
         } else if (spec.collection != null) {
-
-          this.collectionStore.get(spec.collection, spec.params, function(collectionData) {
-            if (collectionData) {
-              modelData = this.retrieveModelsForCollectionName(spec.collection, collectionData.ids);
-              modelOptions = {
-                meta: collectionData.meta,
-                params: collectionData.params
-              };
-            }
-            this._retrieveModelData(spec, modelData, modelOptions, options, cb);
+          this.collectionStore.get(spec.collection, spec.params, function(collection) {
+            this._refreshData(spec, collection, options, cb);
           }.bind(this));
 
         }
@@ -145,22 +136,21 @@ Fetcher.prototype._retrieve = function(fetchSpecs, options, callback) {
   async.parallel(batchedRequests, callback);
 };
 
-Fetcher.prototype._retrieveModelData = function(spec, modelData, modelOptions, options, cb) {
+Fetcher.prototype._refreshData = function(spec, modelOrCollection, options, cb) {
 
   // If we found the model/collection in the store, then return that.
-  if (!this.needsFetch(modelData, spec)) {
-    model = this.getModelOrCollectionForSpec(spec, modelData, modelOptions);
-
+  if (!this.needsFetch(modelOrCollection, spec)) {
     /**
      * If 'checkFresh' is set (and we're in the client), then before we
      * return the cached object we fire off a fetch, compare the results,
      * and if the data is different, we trigger a 'refresh' event.
      */
     if (spec.checkFresh && !isServer && this.shouldCheckFresh(spec)) {
-      model.checkFresh();
+      modelOrCollection.checkFresh();
       this.didCheckFresh(spec);
     }
-    cb(null, model);
+
+    cb(null, modelOrCollection);
   } else {
     /**
      * Else, fetch anew.
@@ -174,9 +164,8 @@ Fetcher.prototype._retrieveModel = function(spec, callback) {
 
   // Attempt to fetch from the modelStore based on the idAttribute
   this.modelUtils.modelIdAttribute(spec.model, function(idAttribute) {
-    var modelData = fetcher.modelStore.get(spec.model, spec.params[idAttribute]);
-    if (modelData)
-      return callback(null, modelData);
+    var model = fetcher.modelStore.get(spec.model, spec.params[idAttribute]);
+    if (model) return callback(null, model);
 
     // if there are no other keys than the id in the params, return null;
     if (_.isEmpty(_.omit(spec.params, idAttribute)))
@@ -187,11 +176,15 @@ Fetcher.prototype._retrieveModel = function(spec, callback) {
   });
 };
 
-Fetcher.prototype.needsFetch = function(modelData, spec) {
-  if (modelData == null) return true;
-  if (this.isMissingKeys(modelData, spec.ensureKeys)) return true;
+Fetcher.prototype.needsFetch = function(modelOrCollection, spec) {
+  if (modelOrCollection == null) return true;
+
+  if (this.modelUtils.isModel(modelOrCollection) && this.isMissingKeys(modelOrCollection.attributes, spec.ensureKeys)) {
+    return true;
+  }
+
   if (spec.needsFetch === true) return true;
-  if (typeof spec.needsFetch === 'function' && spec.needsFetch(modelData)) return true;
+  if (typeof spec.needsFetch === 'function' && spec.needsFetch(modelOrCollection)) return true;
   return false;
 };
 
@@ -201,9 +194,11 @@ Fetcher.prototype.isMissingKeys = function(modelData, keys) {
   if (keys == null) {
     return false;
   }
+
   if (!_.isArray(keys)) {
     keys = [keys];
   }
+
   for (var i = 0, len = keys.length; i < len; i++) {
     key = keys[i];
     if (modelData[key] == null) {
@@ -216,6 +211,7 @@ Fetcher.prototype.isMissingKeys = function(modelData, keys) {
 Fetcher.prototype.fetchFromApi = function(spec, options, callback) {
   var model = this.getModelOrCollectionForSpec(spec),
       fetcher = this;
+
   model.fetch({
     headers: options.headers || {},
     data: spec.params,
@@ -308,7 +304,7 @@ Fetcher.prototype.hydrate = function(summaries, options, callback) {
   async.forEach(_.keys(summaries), function(name, cb) {
     var summary = summaries[name];
     if (summary.model != null) {
-      results[name] = fetcher.modelStore.get(summary.model, summary.id, true);
+      results[name] = fetcher.modelStore.get(summary.model, summary.id);
 
       if ((results[name] != null) && (options.app != null)) {
         results[name].app = options.app;
@@ -318,29 +314,14 @@ Fetcher.prototype.hydrate = function(summaries, options, callback) {
 
     } else if (summary.collection != null) {
       // Also support getting all models for a collection.
-      fetcher.collectionStore.get(summary.collection, summary.params, function(collectionData) {
-        var collectionOptions,
-            models;
-
-        if (collectionData == null) {
+      fetcher.collectionStore.get(summary.collection, summary.params, function(collection) {
+        if (collection == null) {
           throw new Error("Collection of type \"" + summary.collection + "\" not found for params: " + JSON.stringify(summary.params));
         }
 
-        models = fetcher.retrieveModelsForCollectionName(summary.collection, collectionData.ids);
-        collectionOptions = {
-          params: summary.params,
-          meta: collectionData.meta,
-          app: options.app
-        };
-        fetcher.modelUtils.getCollection(summary.collection, models, collectionOptions, function(collection) {
-          results[name] = collection;
+        results[name] = collection;
 
-          if ((results[name] != null) && (options.app != null)) {
-            results[name].app = options.app;
-          }
-
-          cb(null);
-        });
+        cb(null);
       });
     }
   }, function(err) {

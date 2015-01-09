@@ -1,11 +1,16 @@
 var App = require('../../shared/app'),
-    AppView = require('../../client/app_view'),
     should = require('chai').should(),
+    expect = require('chai').expect,
     clientTestHelper = require('../helpers/client_test'),
-    $ = require('jquery');
+    $ = require('jquery'),
+    AppView;
 
 describe('AppView', function() {
-  before(clientTestHelper.before);
+  before(function () {
+    clientTestHelper.before.call(this);
+    delete require.cache;
+    AppView = require('../../client/app_view');
+  });
 
   beforeEach(function() {
     this.app = new App();
@@ -37,4 +42,11 @@ describe('AppView', function() {
     var actual = this.appView.shouldInterceptClick('/', el, event);
     actual.should.be.false;
   });
+
+  it('should allow contentEl to be set in a child', function(){
+    var Child = AppView.extend({ options: { contentEl: '#foo' } });
+    var appView = new Child({app: this.app});
+    expect( appView.options.contentEl ).to.equal( '#foo' );
+  });
+
 });

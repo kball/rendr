@@ -16,7 +16,7 @@ describe('CollectionStore', function() {
     this.store.clear();
   });
 
-  it("should set a collection and retrieve its ids and meta", function() {
+  it("should set a collection and retrieve its instance", function() {
     var collection, meta, models, params, results;
 
     models = [
@@ -40,11 +40,7 @@ describe('CollectionStore', function() {
     });
     this.store.set(collection, params);
     results = this.store.get(collection.constructor.name, params);
-    results.should.eql({
-      ids: collection.pluck('id'),
-      meta: meta,
-      params: params
-    });
+    results.should.be.equal(collection);
   });
 
   it("should support custom idAttribute for models", function() {
@@ -87,11 +83,7 @@ describe('CollectionStore', function() {
     this.store.set(collection, params);
     addClassMapping.add(collection.constructor.name, MyCollection);
     results = this.store.get(collection.constructor.name, params);
-    results.should.eql({
-      ids: collection.pluck('login'),
-      meta: meta,
-      params: params
-    });
+    results.should.be.equal(collection);
   });
 
   it("should treat different params as different collections", function() {
@@ -124,17 +116,9 @@ describe('CollectionStore', function() {
     collection10 = new BaseCollection(models10, {params: params10});
     this.store.set(collection10, params10);
     results0 = this.store.get(collection0.constructor.name, params0);
-    results0.should.eql({
-      ids: collection0.pluck('id'),
-      meta: {},
-      params: params0
-    });
+    results0.should.be.equal(collection0);
     results10 = this.store.get(collection10.constructor.name, params10);
-    results10.should.eql({
-      ids: collection10.pluck('id'),
-      meta: {},
-      params: params10
-    });
+    results10.should.be.equal(collection10);
   });
 
   it("should retrieve collections without regard to params order", function() {
@@ -163,6 +147,96 @@ describe('CollectionStore', function() {
     this.store.set(collection, params0);
     results = this.store.get(collection.constructor.name, params1);
     should.exist(results);
-    results.ids.should.eql(collection.pluck('id'));
+    results.should.be.equal(collection);
+  });
+
+  context("there is data to be cleared", function() {
+    var collection, collection2, anotherCollection, models, models2, modelsAnother,
+      params, params2, resultsCollection;
+
+    beforeEach(function() {
+      models = [
+        {
+          foo: 'bar',
+          id: 1
+        }, {
+          foo: 'bot',
+          id: 2
+        }
+      ];        
+      models2 = [
+        {
+          foo: 'bar',
+          id: 11
+        }, {
+          foo: 'bot',
+          id: 12
+        }
+      ];        
+      modelsAnother = [
+        {
+          foo: 'bee',
+          id: 111
+        }, {
+          foo: 'hum',
+          id: 112
+        }
+      ];
+      params = {
+        offset: 0
+      };
+      params2 = {offset: 10};
+      collection = new BaseCollection(models, {params: params});
+      collection2 = new BaseCollection(models2, {params: params2});        
+
+      function AnotherCollection() {
+        AnotherCollection.super_.apply(this, arguments);
+      }
+      util.inherits(AnotherCollection, BaseCollection);
+
+      anotherCollection = new AnotherCollection(modelsAnother, {params: params });      
+    });
+
+    it("should allow clearing out of the store by params", function() {
+      this.store.set(collection, params);
+      this.store.set(collection2, params2);
+      this.store.clear(collection.constructor.name, params);
+      resultsCollection = this.store.get(collection.constructor.name, params);
+      should.not.exist(resultsCollection);
+      resultsCollection = this.store.get(collection2.constructor.name, params2);
+      should.exist(resultsCollection);
+    });  
+
+    it("should allow clearing a collection out of the store", function() {
+      this.store.set(collection, params);
+      this.store.set(collection2, params2);
+      this.store.set(anotherCollection, params);
+
+      resultsCollection = this.store.get(collection.constructor.name, params);
+      should.exist(resultsCollection);
+      resultsCollection = this.store.get(collection2.constructor.name, params2);
+      should.exist(resultsCollection);
+
+      this.store.clear(collection.constructor.name);
+      resultsCollection = this.store.get(collection.constructor.name, params);
+      should.not.exist(resultsCollection);
+      resultsCollection = this.store.get(collection2.constructor.name, params2);
+      should.not.exist(resultsCollection);
+      this.store.cache.should.not.be.empty;
+    });
+
+
+    it("should allow clearing out the store", function() {
+      this.store.set(collection, params);
+      this.store.set(collection2, params2);
+      this.store.set(anotherCollection, params);
+
+      this.store.clear();
+      resultsCollection = this.store.get(collection.constructor.name, params);
+      should.not.exist(resultsCollection);
+      resultsCollection = this.store.get(collection2.constructor.name, params2);
+      should.not.exist(resultsCollection);
+      this.store.cache.should.be.empty;
+    });
   });
 });
